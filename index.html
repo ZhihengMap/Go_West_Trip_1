@@ -247,17 +247,21 @@ const DAYS = [
   }
 ];
 
-/* 总览:每晚过夜地(第一个是出发机场) */
+/* 总览:出发 → 每晚过夜地,中间夹关键途经点让总路线贴合每天实走的路,最后返回 Sea-Tac 闭环 */
 const OVERVIEW = [
-  {q:"Seattle-Tacoma International Airport", name:"Sea-Tac 机场", start:true},
-  {q:"Crystal Mountain, WA", name:"7.14 水晶山"},
-  {q:"Oyster Bay Inn & Suites, Bremerton, WA", name:"7.15 Bremerton"},
-  {q:"Best Western Plus Aberdeen, WA", name:"7.16 Aberdeen"},
-  {q:"Quality Inn Florence, Oregon", name:"7.17 Florence"},
-  {q:"Red Lion Inn & Suites Grants Pass, OR", name:"7.18 Grants Pass"},
-  {q:"Sleep Inn & Suites Redmond, OR", name:"7.19 Redmond"},
-  {q:"Hampton Inn & Suites Portland Pearl District, OR", name:"7.20 Portland"},
-  {q:"FairBridge Inn & Suites DuPont, WA", name:"7.21 DuPont"}
+  {q:"Seattle-Tacoma International Airport", name:"Sea-Tac 机场 · 出发", kind:"start"},
+  {q:"Crystal Mountain, WA", name:"7.14 宿 · 水晶山", kind:"hotel"},
+  {q:"Oyster Bay Inn & Suites, Bremerton, WA", name:"7.15 宿 · Bremerton", kind:"hotel"},
+  {q:"Lake Crescent, WA", name:"7.16 途经 · Lake Crescent", kind:"via"},
+  {q:"Best Western Plus Aberdeen, WA", name:"7.16 宿 · Aberdeen", kind:"hotel"},
+  {q:"Quality Inn Florence, Oregon", name:"7.17 宿 · Florence", kind:"hotel"},
+  {q:"Samuel H. Boardman State Scenic Corridor, OR", name:"7.18 途经 · Boardman 海岸走廊", kind:"via"},
+  {q:"Red Lion Inn & Suites Grants Pass, OR", name:"7.18 宿 · Grants Pass", kind:"hotel"},
+  {q:"Crater Lake National Park", name:"7.19 途经 · 火山口湖", kind:"via"},
+  {q:"Sleep Inn & Suites Redmond, OR", name:"7.19 宿 · Redmond", kind:"hotel"},
+  {q:"Hampton Inn & Suites Portland Pearl District, OR", name:"7.20 宿 · Portland", kind:"hotel"},
+  {q:"FairBridge Inn & Suites DuPont, WA", name:"7.21 宿 · DuPont", kind:"hotel"},
+  {q:"Seattle-Tacoma International Airport", name:"7.22 · 返回 Sea-Tac", kind:"end"}
 ];
 
 /* ---- 通用工具 ---- */
@@ -271,11 +275,9 @@ function dayQs(d){ return [d.from.q, ...d.stops.filter(s=>s.route!==false).map(s
 /* 生成一天/总览的「点位 + 标记元数据」 */
 function pointsFor(id){
   if(id==='ov'){
-    return OVERVIEW.map((o,i)=>({
-      q:o.q, title:o.name,
-      color: o.start?COLOR.start:COLOR.hotel,
-      label: o.start?'起':String(i), kind:o.start?'start':'hotel'
-    }));
+    const M={start:{c:COLOR.start,l:'起',k:'start'}, end:{c:COLOR.start,l:'返',k:'start'},
+             hotel:{c:COLOR.hotel,l:'宿',k:'hotel'}, via:{c:COLOR.sight,l:'途',k:'sight'}};
+    return OVERVIEW.map(o=>({ q:o.q, title:o.name, color:M[o.kind].c, label:M[o.kind].l, kind:M[o.kind].k }));
   }
   const d = DAYS.find(x=>x.id===id);
   const arr = [{q:d.from.q, title:d.from.name, color:COLOR.start, label:'起', kind:'start'}];
