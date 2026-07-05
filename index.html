@@ -89,7 +89,13 @@
   .ovday .oc .r{font-weight:600;font-size:14.5px}
   .ovday .oc .s{font-size:12px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .foot{padding:6px 22px 18px;color:var(--muted);font-size:12px;text-align:center}
-  @media (max-width:880px){main{grid-template-columns:1fr;gap:12px}.mapwrap{min-height:340px}}
+  @media (max-width:880px){
+    html,body{height:auto}
+    body{min-height:100vh}
+    main{display:block;flex:none;padding:12px 14px 22px}
+    .mapwrap{min-height:0;height:52vh;margin-bottom:12px}
+    .panel{overflow:visible;max-height:none;min-height:0}
+  }
 </style>
 </head>
 <body>
