@@ -364,7 +364,7 @@ function select(id){
 }
 
 /* ======================= Google 地图 ======================= */
-let mapsReady=false, gmap, gDir, gGeo, gInfo, gRenderers=[], gMarkers=[];
+let mapsReady=false, gmap, gDir, gGeo, gInfo, gLines=[], gMarkers=[], mapToken=0;
 const geoCache={};
 
 function onMapsReady(){
@@ -393,7 +393,7 @@ function geocode(q){
 }
 function clearMap(){
   gMarkers.forEach(m=>m.setMap(null)); gMarkers=[];
-  gRenderers.forEach(r=>r.setMap(null)); gRenderers=[];
+  gLines.forEach(l=>l.setMap(null)); gLines=[];
   if(gInfo) gInfo.close();
 }
 function infoHtml(m){
@@ -408,6 +408,23 @@ function infoHtml(m){
 function fmtDur(sec){ let h=Math.floor(sec/3600), m=Math.round((sec%3600)/60); if(m===60){h++;m=0;} if(h&&m)return `${h} 小时 ${m} 分`; if(h)return `${h} 小时`; return `${m} 分`; }
 function sumRoute(res){ let sec=0,m=0; res.routes[0].legs.forEach(l=>{sec+=l.duration.value; m+=l.distance.value;}); return {sec,m}; }
 function setTrip(sec,m,isOv){ tripEl.textContent=`🚗 ${isOv?'全程车程':'今日车程'}约 ${fmtDur(sec)} · ${Math.round(m/1609.34)} 英里`; }
+function dayRoutablePts(d){
+  return [{q:d.from.q,title:d.from.name}, ...d.stops.filter(s=>s.route!==false).map(s=>({q:s.q,title:s.name})), {q:d.to.q,title:d.to.name}];
+}
+function drawLegs(res, pts){
+  res.routes[0].legs.forEach((leg,i)=>{
+    const path=[]; leg.steps.forEach(s=>{ for(const p of s.path) path.push(p); });
+    const a=pts[i]?pts[i].title:'', b=pts[i+1]?pts[i+1].title:'';
+    const line=new google.maps.Polyline({map:gmap, path, strokeColor:'#2a7fb8', strokeOpacity:.85, strokeWeight:5, clickable:true, zIndex:1});
+    line.addListener('mouseover',()=>line.setOptions({strokeWeight:8, strokeColor:'#1c6fa0'}));
+    line.addListener('mouseout',()=>line.setOptions({strokeWeight:5, strokeColor:'#2a7fb8'}));
+    line.addListener('click',(e)=>{
+      gInfo.setContent(`<div style="font:13px/1.5 -apple-system,sans-serif;color:#222;max-width:220px"><b>${esc(a)} → ${esc(b)}</b><div style="margin-top:4px;color:#2a7fb8;font-weight:700">🚗 ${leg.duration.text} · ${leg.distance.text}</div></div>`);
+      gInfo.setPosition(e.latLng); gInfo.open(gmap);
+    });
+    gLines.push(line);
+  });
+}
 async function updateMap(id){
   if(!mapsReady) return;
   clearMap();
@@ -430,18 +447,18 @@ async function updateMap(id){
     gMarkers.push(mk);
   });
   if(!bounds.isEmpty()) gmap.fitBounds(bounds, 64);
-  // 路线 + 车程预估
+  // 路线(逐段可点击查看时长/距离)+ 车程预估
   tripEl.textContent='🚗 车程计算中…';
-  const drawRoute=(qs,onDone)=>{
-    if(qs.length<2){ if(onDone) onDone(null); return; }
-    const renderer=new google.maps.DirectionsRenderer({map:gmap, suppressMarkers:true, preserveViewport:true,
-      polylineOptions:{strokeColor:'#2a7fb8', strokeOpacity:.85, strokeWeight:5}});
-    gRenderers.push(renderer);
+  const token=++mapToken;
+  const drawRoute=(pts,onDone)=>{
+    if(pts.length<2){ if(onDone) onDone(null); return; }
+    const qs=pts.map(p=>p.q);
     const req={origin:qs[0], destination:qs[qs.length-1],
-      waypoints:qs.slice(1,-1).map(q=>({location:q, stopover:true})), travelMode:google.maps.TravelMode.DRIVING};
+      waypoints:qs.slice(1,-1).map(q=>({location:q, stopover:true})),
+      travelMode:google.maps.TravelMode.DRIVING, unitSystem:google.maps.UnitSystem.IMPERIAL};
     const run=(n)=>gDir.route(req,(res,st)=>{
-      if(!gRenderers.includes(renderer)) return;
-      if(st==='OK'){ renderer.setDirections(res); if(onDone) onDone(res); }
+      if(token!==mapToken) return;
+      if(st==='OK'){ drawLegs(res, pts); if(onDone) onDone(res); }
       else if(st==='OVER_QUERY_LIMIT' && n<4){ setTimeout(()=>run(n+1), 400*n); }
     });
     run(1);
@@ -449,14 +466,14 @@ async function updateMap(id){
   if(id==='ov'){
     const ovb=new google.maps.LatLngBounds(), tot={sec:0,m:0};
     DAYS.forEach((d,i)=>setTimeout(()=>{
-      if(currentSel!=='ov') return;
-      drawRoute(dayQs(d),(res)=>{ if(currentSel!=='ov'||!res) return;
+      if(token!==mapToken) return;
+      drawRoute(dayRoutablePts(d),(res)=>{ if(token!==mapToken||!res) return;
         ovb.union(res.routes[0].bounds); gmap.fitBounds(ovb,40);
         const s=sumRoute(res); tot.sec+=s.sec; tot.m+=s.m; setTrip(tot.sec,tot.m,true);
       });
     }, i*280));
   } else {
-    drawRoute(meta.filter(m=>m.route!==false).map(m=>m.q),(res)=>{ if(res){ const s=sumRoute(res); setTrip(s.sec,s.m,false); } });
+    drawRoute(meta.filter(m=>m.route!==false),(res)=>{ if(res){ const s=sumRoute(res); setTrip(s.sec,s.m,false); } });
   }
 }
 
