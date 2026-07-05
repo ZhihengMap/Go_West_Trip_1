@@ -413,16 +413,20 @@ function dayRoutablePts(d){
 }
 function drawLegs(res, pts){
   res.routes[0].legs.forEach((leg,i)=>{
-    const path=[]; leg.steps.forEach(s=>{ for(const p of s.path) path.push(p); });
+    const path=[]; leg.steps.forEach(s=>s.path.forEach(p=>path.push(p)));
+    if(!path.length) return;
     const a=pts[i]?pts[i].title:'', b=pts[i+1]?pts[i+1].title:'';
-    const line=new google.maps.Polyline({map:gmap, path, strokeColor:'#2a7fb8', strokeOpacity:.85, strokeWeight:5, clickable:true, zIndex:1});
-    line.addListener('mouseover',()=>line.setOptions({strokeWeight:8, strokeColor:'#1c6fa0'}));
-    line.addListener('mouseout',()=>line.setOptions({strokeWeight:5, strokeColor:'#2a7fb8'}));
-    line.addListener('click',(e)=>{
+    // 可见细线
+    const vis=new google.maps.Polyline({map:gmap, path, strokeColor:'#2a7fb8', strokeOpacity:.9, strokeWeight:5, clickable:false, zIndex:1});
+    // 透明粗线,专门接管鼠标(目标区大,好点)
+    const hit=new google.maps.Polyline({map:gmap, path, strokeOpacity:0, strokeWeight:18, clickable:true, zIndex:3});
+    hit.addListener('mouseover',()=>vis.setOptions({strokeWeight:8, strokeColor:'#1c6fa0'}));
+    hit.addListener('mouseout',()=>vis.setOptions({strokeWeight:5, strokeColor:'#2a7fb8'}));
+    hit.addListener('click',(e)=>{
       gInfo.setContent(`<div style="font:13px/1.5 -apple-system,sans-serif;color:#222;max-width:220px"><b>${esc(a)} → ${esc(b)}</b><div style="margin-top:4px;color:#2a7fb8;font-weight:700">🚗 ${leg.duration.text} · ${leg.distance.text}</div></div>`);
       gInfo.setPosition(e.latLng); gInfo.open(gmap);
     });
-    gLines.push(line);
+    gLines.push(vis, hit);
   });
 }
 async function updateMap(id){
