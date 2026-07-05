@@ -218,7 +218,7 @@ const DAYS = [
     stops:[
       {name:"Smith Rock State Park", q:"Smith Rock State Park, OR", tag:"sight"},
       {name:"Sahalie Falls", q:"Sahalie Falls, Oregon", tag:"suggest", badge:"太累可略过 · 省~2h"},
-      {name:"Mount Jefferson(观景)", q:"Mount Jefferson, Oregon", tag:"sight"},
+      {name:"Mount Jefferson(沿途远观)", q:"Mount Jefferson, Oregon", tag:"sight", route:false},
       {name:"Mount Hood(Timberline Lodge)", q:"Timberline Lodge, Mount Hood, OR", tag:"sight"}
     ],
     hotel:{name:"Hampton Inn & Suites Portland-Pearl", sub:"Portland Pearl District", q:"Hampton Inn & Suites Portland Pearl District, OR", bf:true, extra:"🅿️ 含停车 $50",
@@ -266,7 +266,7 @@ const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"
 const COLOR = {sight:'#1f7a5c', suggest:'#2a7fb8', stop:'#6b7a75', hotel:'#e8825a', start:'#8a938f'};
 function dirLink(qs){ return 'https://www.google.com/maps/dir/' + qs.map(enc).join('/'); }
 function placeLink(q){ return 'https://www.google.com/maps/search/?api=1&query=' + enc(q); }
-function dayQs(d){ return [d.from.q, ...d.stops.map(s=>s.q), d.to.q]; }
+function dayQs(d){ return [d.from.q, ...d.stops.filter(s=>s.route!==false).map(s=>s.q), d.to.q]; }
 
 /* 生成一天/总览的「点位 + 标记元数据」 */
 function pointsFor(id){
@@ -281,7 +281,8 @@ function pointsFor(id){
   const arr = [{q:d.from.q, title:d.from.name, color:COLOR.start, label:'起', kind:'start'}];
   d.stops.forEach((s,i)=>arr.push({
     q:s.q, title:s.name, color:COLOR[s.tag]||COLOR.sight,
-    label:String(i+1), kind:'sight', badge:s.badge, suggest:s.tag==='suggest'
+    label:String(i+1), kind:'sight', badge:s.badge, suggest:s.tag==='suggest',
+    route:s.route!==false
   }));
   arr.push({q:d.to.q, title:d.to.name, color:COLOR.hotel, label:'宿', kind:'hotel', hotel:d.hotel});
   return arr;
@@ -424,7 +425,7 @@ async function updateMap(id){
   });
   if(!bounds.isEmpty()) gmap.fitBounds(bounds, 64);
   // 路线连线(失败也不影响标记)
-  const qs=meta.map(m=>m.q);
+  const qs=meta.filter(m=>m.route!==false).map(m=>m.q);
   const renderer=new google.maps.DirectionsRenderer({map:gmap, suppressMarkers:true, preserveViewport:true,
     polylineOptions:{strokeColor:'#2a7fb8', strokeOpacity:.85, strokeWeight:5}});
   curRenderer=renderer;
