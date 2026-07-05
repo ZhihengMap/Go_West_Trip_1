@@ -40,6 +40,8 @@
   main{flex:1;display:grid;grid-template-columns:1.55fr 1fr;gap:16px;padding:16px 22px 22px;min-height:0}
   .mapwrap{position:relative;background:var(--panel);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow);border:1px solid var(--line);display:flex;flex-direction:column;min-height:460px}
   #map{flex:1;width:100%;background:var(--chip)}
+  .triptime{position:absolute;top:12px;left:12px;z-index:4;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:6px 11px;font-size:12.5px;font-weight:600;box-shadow:0 2px 8px rgba(0,0,0,.14);pointer-events:none}
+  .triptime:empty{display:none}
   .mapbar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted)}
   .mapbar a{color:#fff;background:var(--ocean);text-decoration:none;padding:7px 12px;border-radius:9px;font-weight:600;font-size:12.5px;white-space:nowrap}
   .mapbar a:hover{filter:brightness(1.06)}
@@ -102,6 +104,7 @@
   <main>
     <div class="mapwrap">
       <div id="map"></div>
+      <div id="tripTime" class="triptime"></div>
       <div class="overlay" id="overlay"></div>
       <div class="mapbar">
         <div class="legend">
@@ -289,7 +292,8 @@ function pointsFor(id){
 
 /* ======================= 侧栏渲染 ======================= */
 const strip=document.getElementById('strip'), panel=document.getElementById('panel'),
-      openA=document.getElementById('openMaps'), overlay=document.getElementById('overlay');
+      openA=document.getElementById('openMaps'), overlay=document.getElementById('overlay'),
+      tripEl=document.getElementById('tripTime');
 let currentSel='ov';
 
 function buildTabs(){
@@ -401,6 +405,9 @@ function infoHtml(m){
     <b>${esc(m.title)}</b>${extra}
     <div style="margin-top:6px"><a href="${esc(placeLink(m.q))}" target="_blank" style="color:#2a7fb8;text-decoration:none">在 Google 地图打开 ↗</a></div></div>`;
 }
+function fmtDur(sec){ let h=Math.floor(sec/3600), m=Math.round((sec%3600)/60); if(m===60){h++;m=0;} if(h&&m)return `${h} 小时 ${m} 分`; if(h)return `${h} 小时`; return `${m} 分`; }
+function sumRoute(res){ let sec=0,m=0; res.routes[0].legs.forEach(l=>{sec+=l.duration.value; m+=l.distance.value;}); return {sec,m}; }
+function setTrip(sec,m,isOv){ tripEl.textContent=`🚗 ${isOv?'全程车程':'今日车程'}约 ${fmtDur(sec)} · ${Math.round(m/1609.34)} 英里`; }
 async function updateMap(id){
   if(!mapsReady) return;
   clearMap();
@@ -423,9 +430,10 @@ async function updateMap(id){
     gMarkers.push(mk);
   });
   if(!bounds.isEmpty()) gmap.fitBounds(bounds, 64);
-  // 路线:每天单独连线;总览 = 把每天的路线叠加(因此和每天完全一致)
+  // 路线 + 车程预估
+  tripEl.textContent='🚗 车程计算中…';
   const drawRoute=(qs,onDone)=>{
-    if(qs.length<2) return;
+    if(qs.length<2){ if(onDone) onDone(null); return; }
     const renderer=new google.maps.DirectionsRenderer({map:gmap, suppressMarkers:true, preserveViewport:true,
       polylineOptions:{strokeColor:'#2a7fb8', strokeOpacity:.85, strokeWeight:5}});
     gRenderers.push(renderer);
@@ -439,13 +447,16 @@ async function updateMap(id){
     run(1);
   };
   if(id==='ov'){
-    const ovb=new google.maps.LatLngBounds();
+    const ovb=new google.maps.LatLngBounds(), tot={sec:0,m:0};
     DAYS.forEach((d,i)=>setTimeout(()=>{
       if(currentSel!=='ov') return;
-      drawRoute(dayQs(d),(res)=>{ if(currentSel==='ov'){ ovb.union(res.routes[0].bounds); gmap.fitBounds(ovb,40); } });
+      drawRoute(dayQs(d),(res)=>{ if(currentSel!=='ov'||!res) return;
+        ovb.union(res.routes[0].bounds); gmap.fitBounds(ovb,40);
+        const s=sumRoute(res); tot.sec+=s.sec; tot.m+=s.m; setTrip(tot.sec,tot.m,true);
+      });
     }, i*280));
   } else {
-    drawRoute(meta.filter(m=>m.route!==false).map(m=>m.q));
+    drawRoute(meta.filter(m=>m.route!==false).map(m=>m.q),(res)=>{ if(res){ const s=sumRoute(res); setTrip(s.sec,s.m,false); } });
   }
 }
 
