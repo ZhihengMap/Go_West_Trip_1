@@ -247,19 +247,14 @@ const DAYS = [
   }
 ];
 
-/* 总览:出发 → 每晚过夜地,中间夹关键途经点让总路线贴合每天实走的路,最后返回 Sea-Tac 闭环 */
+/* 总览:出发机场 + 每晚过夜酒店 + 返回机场;总路线由每天的路线叠加得到(见 updateMap) */
 const OVERVIEW = [
   {q:"Seattle-Tacoma International Airport", name:"Sea-Tac 机场 · 出发", kind:"start"},
   {q:"Crystal Mountain, WA", name:"7.14 宿 · 水晶山", kind:"hotel"},
   {q:"Oyster Bay Inn & Suites, Bremerton, WA", name:"7.15 宿 · Bremerton", kind:"hotel"},
-  {q:"Lake Crescent, WA", name:"7.16 途经 · Lake Crescent", kind:"via"},
   {q:"Best Western Plus Aberdeen, WA", name:"7.16 宿 · Aberdeen", kind:"hotel"},
-  {q:"Haystack Rock, Cannon Beach, OR", name:"7.17 途经 · Cannon Beach", kind:"via"},
-  {q:"Yaquina Head Lighthouse, Newport, OR", name:"7.17 途经 · Newport", kind:"via"},
   {q:"Quality Inn Florence, Oregon", name:"7.17 宿 · Florence", kind:"hotel"},
-  {q:"Samuel H. Boardman State Scenic Corridor, OR", name:"7.18 途经 · Boardman 海岸走廊", kind:"via"},
   {q:"Red Lion Inn & Suites Grants Pass, OR", name:"7.18 宿 · Grants Pass", kind:"hotel"},
-  {q:"Crater Lake National Park", name:"7.19 途经 · 火山口湖", kind:"via"},
   {q:"Sleep Inn & Suites Redmond, OR", name:"7.19 宿 · Redmond", kind:"hotel"},
   {q:"Hampton Inn & Suites Portland Pearl District, OR", name:"7.20 宿 · Portland", kind:"hotel"},
   {q:"FairBridge Inn & Suites DuPont, WA", name:"7.21 宿 · DuPont", kind:"hotel"},
@@ -365,7 +360,7 @@ function select(id){
 }
 
 /* ======================= Google 地图 ======================= */
-let mapsReady=false, gmap, gDir, gGeo, gInfo, curRenderer=null, gMarkers=[];
+let mapsReady=false, gmap, gDir, gGeo, gInfo, gRenderers=[], gMarkers=[];
 const geoCache={};
 
 function onMapsReady(){
@@ -394,7 +389,7 @@ function geocode(q){
 }
 function clearMap(){
   gMarkers.forEach(m=>m.setMap(null)); gMarkers=[];
-  if(curRenderer){ curRenderer.setMap(null); curRenderer=null; }
+  gRenderers.forEach(r=>r.setMap(null)); gRenderers=[];
   if(gInfo) gInfo.close();
 }
 function infoHtml(m){
@@ -428,16 +423,30 @@ async function updateMap(id){
     gMarkers.push(mk);
   });
   if(!bounds.isEmpty()) gmap.fitBounds(bounds, 64);
-  // 路线连线(失败也不影响标记)
-  const qs=meta.filter(m=>m.route!==false).map(m=>m.q);
-  const renderer=new google.maps.DirectionsRenderer({map:gmap, suppressMarkers:true, preserveViewport:true,
-    polylineOptions:{strokeColor:'#2a7fb8', strokeOpacity:.85, strokeWeight:5}});
-  curRenderer=renderer;
-  gDir.route({
-    origin:qs[0], destination:qs[qs.length-1],
-    waypoints:qs.slice(1,-1).map(q=>({location:q, stopover:true})),
-    travelMode:google.maps.TravelMode.DRIVING
-  },(res,st)=>{ if(st==='OK'&&curRenderer===renderer) renderer.setDirections(res); });
+  // 路线:每天单独连线;总览 = 把每天的路线叠加(因此和每天完全一致)
+  const drawRoute=(qs,onDone)=>{
+    if(qs.length<2) return;
+    const renderer=new google.maps.DirectionsRenderer({map:gmap, suppressMarkers:true, preserveViewport:true,
+      polylineOptions:{strokeColor:'#2a7fb8', strokeOpacity:.85, strokeWeight:5}});
+    gRenderers.push(renderer);
+    const req={origin:qs[0], destination:qs[qs.length-1],
+      waypoints:qs.slice(1,-1).map(q=>({location:q, stopover:true})), travelMode:google.maps.TravelMode.DRIVING};
+    const run=(n)=>gDir.route(req,(res,st)=>{
+      if(!gRenderers.includes(renderer)) return;
+      if(st==='OK'){ renderer.setDirections(res); if(onDone) onDone(res); }
+      else if(st==='OVER_QUERY_LIMIT' && n<4){ setTimeout(()=>run(n+1), 400*n); }
+    });
+    run(1);
+  };
+  if(id==='ov'){
+    const ovb=new google.maps.LatLngBounds();
+    DAYS.forEach((d,i)=>setTimeout(()=>{
+      if(currentSel!=='ov') return;
+      drawRoute(dayQs(d),(res)=>{ if(currentSel==='ov'){ ovb.union(res.routes[0].bounds); gmap.fitBounds(ovb,40); } });
+    }, i*280));
+  } else {
+    drawRoute(meta.filter(m=>m.route!==false).map(m=>m.q));
+  }
 }
 
 /* ======================= 加载脚本 / 提示 ======================= */
